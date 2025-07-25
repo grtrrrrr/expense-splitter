@@ -1,39 +1,94 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Expense Splitter</title>
   <style>
-    body { font-family: sans-serif; padding: 20px; max-width: 600px; margin: auto; }
-    input, button { margin-top: 5px; display: block; width: 100%; padding: 8px; }
+    body { font-family: Arial, sans-serif; padding: 20px; max-width: 600px; margin: auto; }
+    h2 { margin-top: 30px; }
+    input, select, button { margin: 5px 0; padding: 8px; width: 100%; }
+    .summary { background-color: #f4f4f4; padding: 10px; margin-top: 20px; }
   </style>
 </head>
 <body>
-  <h1>Simple Splitwise</h1>
-  <input id="name" placeholder="Who paid?" />
-  <input id="amount" placeholder="How much?" type="number" />
-  <button onclick="addExpense()">Add</button>
+  <h1>Expense Splitter</h1>
 
-  <h2>Expenses</h2>
-  <ul id="list"></ul>
+  <h2>Add Profile</h2>
+  <input type="text" id="nameInput" placeholder="Enter name">
+  <button onclick="addProfile()">Add Profile</button>
+
+  <h2>Log Expense</h2>
+  <select id="payerSelect"></select>
+  <input type="number" id="amountInput" placeholder="Amount (EUR)">
+  <button onclick="logExpense()">Add Expense</button>
+
+  <h2>Summary</h2>
+  <button onclick="showSummary()">Show Balances</button>
+  <div class="summary" id="summary"></div>
 
   <script>
+    const profiles = [];
     const expenses = [];
-    function addExpense() {
-      const name = document.getElementById('name').value;
-      const amount = parseFloat(document.getElementById('amount').value);
-      if (name && amount) {
-        expenses.push({ name, amount });
-        updateList();
+
+    function addProfile() {
+      const name = document.getElementById('nameInput').value.trim();
+      if (name && !profiles.includes(name)) {
+        profiles.push(name);
+        const option = document.createElement('option');
+        option.value = name;
+        option.textContent = name;
+        document.getElementById('payerSelect').appendChild(option);
+        document.getElementById('nameInput').value = '';
       }
     }
-    function updateList() {
-      const list = document.getElementById('list');
-      list.innerHTML = "";
-      expenses.forEach((e, i) => {
-        const li = document.createElement("li");
-        li.textContent = `${e.name} paid €${e.amount.toFixed(2)}`;
-        list.appendChild(li);
+
+    function logExpense() {
+      const payer = document.getElementById('payerSelect').value;
+      const amount = parseFloat(document.getElementById('amountInput').value);
+      if (payer && !isNaN(amount) && amount > 0) {
+        expenses.push({ payer, amount });
+        document.getElementById('amountInput').value = '';
+      }
+    }
+
+    function showSummary() {
+      const totals = {};
+      profiles.forEach(p => totals[p] = 0);
+      let totalSpend = 0;
+
+      expenses.forEach(({ payer, amount }) => {
+        totals[payer] += amount;
+        totalSpend += amount;
       });
+
+      const perPerson = totalSpend / profiles.length;
+      const balances = {};
+      profiles.forEach(p => balances[p] = totals[p] - perPerson);
+
+      const summaryDiv = document.getElementById('summary');
+      summaryDiv.innerHTML = `<strong>Total Spend:</strong> €${totalSpend.toFixed(2)}<br><br>`;
+      profiles.forEach(p => {
+        summaryDiv.innerHTML += `${p} paid €${totals[p].toFixed(2)}, balance: <strong>€${balances[p].toFixed(2)}</strong><br>`;
+      });
+
+      summaryDiv.innerHTML += '<br><strong>Who owes whom:</strong><br>';
+      const creditors = profiles.filter(p => balances[p] > 0);
+      const debtors = profiles.filter(p => balances[p] < 0);
+
+      for (let debtor of debtors) {
+        let owed = -balances[debtor];
+        for (let creditor of creditors) {
+          if (balances[creditor] === 0) continue;
+          const amount = Math.min(owed, balances[creditor]);
+          if (amount > 0) {
+            summaryDiv.innerHTML += `${debtor} owes ${creditor} €${amount.toFixed(2)}<br>`;
+            balances[debtor] += amount;
+            balances[creditor] -= amount;
+            owed -= amount;
+          }
+        }
+      }
     }
   </script>
 </body>
