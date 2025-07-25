@@ -46,12 +46,11 @@
       border-bottom: 1px solid #ccc;
       padding: 5px 0;
     }
-    .switch { float: right; }
   </style>
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
     import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
-    import { getFirestore, collection, doc, setDoc, getDoc, updateDoc, addDoc, arrayUnion } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
+    import { getFirestore, collection, doc, getDoc, updateDoc, addDoc, arrayUnion } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyAY_-Zr2LGlb4DgwbSLaI0UT4_bwFFSKZg",
@@ -72,17 +71,152 @@
     const profiles = [];
     const expenses = [];
 
-    async function createGroup() { /* ... */ }
-    async function joinGroup() { /* ... */ }
-    async function addProfile() { /* ... */ }
-    async function logExpense() { /* ... */ }
-    async function loadGroupData() { /* ... */ }
-    function showSummary() { /* ... */ }
-    function toggleDarkMode() { /* ... */ }
+    async function createGroup() {
+      const user = auth.currentUser;
+      if (!user) return alert("Please log in first.");
+      const docRef = await addDoc(collection(db, "groups"), {
+        createdBy: user.email,
+        members: [user.email],
+        profiles: [],
+        expenses: []
+      });
+      currentGroupId = docRef.id;
+      localStorage.setItem('groupId', currentGroupId);
+      updateGroupStatus();
+      loadGroupData();
+    }
 
-    onAuthStateChanged(auth, user => { /* ... */ });
+    async function joinGroup() {
+      const groupId = document.getElementById("groupIdInput").value.trim();
+      if (!groupId) return alert("Please enter a Group ID.");
+      const docRef = doc(db, "groups", groupId);
+      const docSnap = await getDoc(docRef);
+      if (!docSnap.exists()) return alert("Group not found.");
+      const data = docSnap.data();
+      const user = auth.currentUser;
+      if (!data.members.includes(user.email)) {
+        await updateDoc(docRef, { members: arrayUnion(user.email) });
+      }
+      currentGroupId = groupId;
+      localStorage.setItem('groupId', currentGroupId);
+      updateGroupStatus();
+      loadGroupData();
+    }
 
-    // Make functions globally accessible
+    function updateGroupStatus() {
+      document.getElementById("groupStatus").innerHTML = `You're in group: <strong>${currentGroupId}</strong>`;
+    }
+
+    async function addProfile() {
+      const name = document.getElementById('nameInput').value.trim();
+      if (!name || !currentGroupId) return;
+      const docRef = doc(db, 'groups', currentGroupId);
+      const group = await getDoc(docRef);
+      const existingProfiles = group.data().profiles || [];
+      if (!existingProfiles.includes(name)) {
+        await updateDoc(docRef, { profiles: arrayUnion(name) });
+        document.getElementById('nameInput').value = '';
+        loadGroupData();
+      }
+    }
+
+    async function logExpense() {
+      const payer = document.getElementById('payerSelect').value;
+      const amount = parseFloat(document.getElementById('amountInput').value);
+      const checkboxes = document.querySelectorAll('#participantsSelect input[type="checkbox"]');
+      const participants = Array.from(checkboxes).filter(cb => cb.checked).map(cb => cb.value);
+      if (!payer || isNaN(amount) || amount <= 0 || participants.length === 0 || !currentGroupId) return;
+      const docRef = doc(db, 'groups', currentGroupId);
+      await updateDoc(docRef, {
+        expenses: arrayUnion({
+          payer,
+          amount,
+          participants,
+          timestamp: new Date().toISOString()
+        })
+      });
+      document.getElementById('amountInput').value = '';
+      loadGroupData();
+    }
+
+    async function loadGroupData() {
+      if (!currentGroupId) return;
+      const docRef = doc(db, 'groups', currentGroupId);
+      const group = await getDoc(docRef);
+      const data = group.data();
+
+      const payerSelect = document.getElementById('payerSelect');
+      const participantsSelect = document.getElementById('participantsSelect');
+      payerSelect.innerHTML = '';
+      participantsSelect.innerHTML = '';
+      (data.profiles || []).forEach(name => {
+        const option = document.createElement('option');
+        option.value = name;
+        option.textContent = name;
+        payerSelect.appendChild(option);
+
+        const checkbox = document.createElement('div');
+        checkbox.innerHTML = `<label><input type="checkbox" value="${name}" checked> ${name}</label>`;
+        participantsSelect.appendChild(checkbox);
+      });
+
+      const log = document.getElementById('expenseLog');
+      log.innerHTML = '';
+      (data.expenses || []).forEach(e => {
+        const div = document.createElement('div');
+        div.className = 'expense-item';
+        div.innerHTML = `${e.payer} paid €${e.amount} split with: ${e.participants.join(', ')}`;
+        log.appendChild(div);
+      });
+
+      profiles.length = 0;
+      (data.profiles || []).forEach(p => profiles.push(p));
+      expenses.length = 0;
+      (data.expenses || []).forEach(e => expenses.push(e));
+    }
+
+    function showSummary() {
+      const totals = {}, balances = {};
+      profiles.forEach(p => { totals[p] = 0; balances[p] = 0; });
+      let totalSpend = 0;
+      expenses.forEach(({ payer, amount, participants }) => {
+        totals[payer] += amount;
+        const share = amount / participants.length;
+        participants.forEach(person => balances[person] -= share);
+        balances[payer] += amount;
+        totalSpend += amount;
+      });
+
+      const summaryDiv = document.getElementById('summary');
+      summaryDiv.innerHTML = `<strong>Total Spend:</strong> €${totalSpend.toFixed(2)}<br><br>`;
+      profiles.forEach(p => {
+        summaryDiv.innerHTML += `${p} paid €${totals[p].toFixed(2)}, balance: <strong>€${balances[p].toFixed(2)}</strong><br>`;
+      });
+    }
+
+    function toggleDarkMode() {
+      const isDark = document.body.style.backgroundColor === 'black';
+      document.body.style.backgroundColor = isDark ? '#f7f9fc' : 'black';
+      document.body.style.color = isDark ? 'black' : 'white';
+    }
+
+    onAuthStateChanged(auth, user => {
+      if (user) {
+        currentUser = user;
+        document.getElementById('authStatus').innerHTML = `Welcome, ${user.displayName} <button onclick="signOut(auth)">Logout</button>`;
+        currentGroupId = localStorage.getItem('groupId') || null;
+        document.getElementById('groupCard').style.display = 'block';
+        if (currentGroupId) {
+          updateGroupStatus();
+          loadGroupData();
+        }
+      } else {
+        document.getElementById('authStatus').innerHTML = `<button onclick="signInWithPopup(auth, provider)">Sign in with Google</button>`;
+        document.getElementById('groupCard').style.display = 'none';
+      }
+    });
+
+    // Fix for global button access
     window.createGroup = createGroup;
     window.joinGroup = joinGroup;
     window.addProfile = addProfile;
