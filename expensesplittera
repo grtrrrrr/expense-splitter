@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Expense Splitter</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; max-width: 600px; margin: auto; }
+    input, button { margin-top: 5px; display: block; width: 100%; padding: 8px; }
+  </style>
+</head>
+<body>
+  <h1>Simple Splitwise</h1>
+  <input id="name" placeholder="Who paid?" />
+  <input id="amount" placeholder="How much?" type="number" />
+  <button onclick="addExpense()">Add</button>
+
+  <h2>Expenses</h2>
+  <ul id="list"></ul>
+
+  <script>
+    const expenses = [];
+    function addExpense() {
+      const name = document.getElementById('name').value;
+      const amount = parseFloat(document.getElementById('amount').value);
+      if (name && amount) {
+        expenses.push({ name, amount });
+        updateList();
+      }
+    }
+    function updateList() {
+      const list = document.getElementById('list');
+      list.innerHTML = "";
+      expenses.forEach((e, i) => {
+        const li = document.createElement("li");
+        li.textContent = `${e.name} paid €${e.amount.toFixed(2)}`;
+        list.appendChild(li);
+      });
+    }
+  </script>
+</body>
+</html>
