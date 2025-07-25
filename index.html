@@ -41,16 +41,28 @@
     button:hover {
       background-color: #0056b3;
     }
-    .summary {
+    .summary, .log {
       background-color: #eef2f7;
       padding: 15px;
       border-radius: 10px;
+    }
+    .expense-item {
+      border-bottom: 1px solid #ccc;
+      padding: 5px 0;
+    }
+    .switch {
+      position: absolute;
+      top: 20px;
+      right: 20px;
     }
   </style>
 </head>
 <body>
   <div class="card">
     <h1>Expense Splitter</h1>
+    <label class="switch">
+      <input type="checkbox" onclick="toggleDarkMode()"> Dark Mode
+    </label>
   </div>
 
   <div class="card">
@@ -71,30 +83,62 @@
   </div>
 
   <div class="card">
+    <h2>Expenses</h2>
+    <div class="log" id="expenseLog"></div>
+  </div>
+
+  <div class="card">
     <h2>Summary</h2>
     <button onclick="showSummary()">Show Balances</button>
+    <button onclick="exportCSV()">Export CSV</button>
     <div class="summary" id="summary"></div>
   </div>
 
   <script>
-    const profiles = [];
-    const expenses = [];
+    const profiles = JSON.parse(localStorage.getItem('profiles') || '[]');
+    const expenses = JSON.parse(localStorage.getItem('expenses') || '[]');
+
+    function saveState() {
+      localStorage.setItem('profiles', JSON.stringify(profiles));
+      localStorage.setItem('expenses', JSON.stringify(expenses));
+    }
+
+    function renderProfiles() {
+      const payerSelect = document.getElementById('payerSelect');
+      const participantsSelect = document.getElementById('participantsSelect');
+      payerSelect.innerHTML = '';
+      participantsSelect.innerHTML = '';
+      profiles.forEach(name => {
+        const option = document.createElement('option');
+        option.value = name;
+        option.textContent = name;
+        payerSelect.appendChild(option);
+
+        const checkbox = document.createElement('div');
+        checkbox.innerHTML = `<label><input type="checkbox" value="${name}" checked> ${name}</label>`;
+        participantsSelect.appendChild(checkbox);
+      });
+    }
+
+    function renderExpenseLog() {
+      const log = document.getElementById('expenseLog');
+      log.innerHTML = '';
+      expenses.forEach((e, index) => {
+        const div = document.createElement('div');
+        div.className = 'expense-item';
+        div.innerHTML = `${e.payer} paid €${e.amount} split with: ${e.participants.join(', ')}
+          <button onclick="deleteExpense(${index})">❌</button>`;
+        log.appendChild(div);
+      });
+    }
 
     function addProfile() {
       const name = document.getElementById('nameInput').value.trim();
       if (name && !profiles.includes(name)) {
         profiles.push(name);
-
-        const option = document.createElement('option');
-        option.value = name;
-        option.textContent = name;
-        document.getElementById('payerSelect').appendChild(option);
-
-        const checkbox = document.createElement('div');
-        checkbox.innerHTML = `<label><input type="checkbox" value="${name}" checked> ${name}</label>`;
-        document.getElementById('participantsSelect').appendChild(checkbox);
-
         document.getElementById('nameInput').value = '';
+        saveState();
+        renderProfiles();
       }
     }
 
@@ -103,12 +147,18 @@
       const amount = parseFloat(document.getElementById('amountInput').value);
       const checkboxes = document.querySelectorAll('#participantsSelect input[type="checkbox"]');
       const participants = Array.from(checkboxes).filter(cb => cb.checked).map(cb => cb.value);
-
       if (payer && !isNaN(amount) && amount > 0 && participants.length > 0) {
         expenses.push({ payer, amount, participants });
         document.getElementById('amountInput').value = '';
-        checkboxes.forEach(cb => cb.checked = true);
+        saveState();
+        renderExpenseLog();
       }
+    }
+
+    function deleteExpense(index) {
+      expenses.splice(index, 1);
+      saveState();
+      renderExpenseLog();
     }
 
     function showSummary() {
@@ -138,7 +188,6 @@
       });
 
       summaryDiv.innerHTML += '<br><strong>Who owes whom:</strong><br>';
-
       const creditors = profiles.filter(p => balances[p] > 0);
       const debtors = profiles.filter(p => balances[p] < 0);
 
@@ -156,6 +205,28 @@
         }
       }
     }
+
+    function exportCSV() {
+      let csv = 'Payer,Amount,Participants\n';
+      expenses.forEach(e => {
+        csv += `${e.payer},${e.amount},"${e.participants.join(', ')}"\n`;
+      });
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'expenses.csv';
+      a.click();
+    }
+
+    function toggleDarkMode() {
+      document.body.style.backgroundColor = document.body.style.backgroundColor === 'black' ? '#f7f9fc' : 'black';
+      document.body.style.color = document.body.style.color === 'white' ? '#000' : 'white';
+    }
+
+    // Initialize UI
+    renderProfiles();
+    renderExpenseLog();
   </script>
 </body>
 </html>
