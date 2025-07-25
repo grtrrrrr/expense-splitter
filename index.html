@@ -56,6 +56,57 @@
       right: 20px;
     }
   </style>
+  <!-- Firebase SDKs -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
+    import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
+    import { getFirestore, doc, setDoc, getDoc, updateDoc, arrayUnion } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyAY_-Zr2LGlb4DgwbSLaI0UT4_bwFFSKZg",
+      authDomain: "expensesplitter-8b8ce.firebaseapp.com",
+      projectId: "expensesplitter-8b8ce",
+      storageBucket: "expensesplitter-8b8ce.firebasestorage.app",
+      messagingSenderId: "683384787127",
+      appId: "1:683384787127:web:23a28fee1e331b6c0f3d32"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth();
+    const db = getFirestore();
+    const provider = new GoogleAuthProvider();
+
+    const loginButton = document.createElement('button');
+    loginButton.textContent = 'Sign in with Google';
+    loginButton.onclick = async () => {
+      try {
+        await signInWithPopup(auth, provider);
+      } catch (error) {
+        alert('Login failed: ' + error.message);
+      }
+    };
+
+    const logoutButton = document.createElement('button');
+    logoutButton.textContent = 'Logout';
+    logoutButton.onclick = () => signOut(auth);
+
+    const userCard = document.createElement('div');
+    document.addEventListener('DOMContentLoaded', () => {
+      document.body.insertBefore(userCard, document.body.firstChild);
+      userCard.appendChild(loginButton);
+    });
+
+    onAuthStateChanged(auth, user => {
+      if (user) {
+        userCard.innerHTML = `<p>Welcome, ${user.displayName}</p>`;
+        userCard.appendChild(logoutButton);
+        // In future: Load user's groups and data from Firestore
+      } else {
+        userCard.innerHTML = '';
+        userCard.appendChild(loginButton);
+      }
+    });
+  </script>
 </head>
 <body>
   <div class="card">
@@ -93,140 +144,5 @@
     <button onclick="exportCSV()">Export CSV</button>
     <div class="summary" id="summary"></div>
   </div>
-
-  <script>
-    const profiles = JSON.parse(localStorage.getItem('profiles') || '[]');
-    const expenses = JSON.parse(localStorage.getItem('expenses') || '[]');
-
-    function saveState() {
-      localStorage.setItem('profiles', JSON.stringify(profiles));
-      localStorage.setItem('expenses', JSON.stringify(expenses));
-    }
-
-    function renderProfiles() {
-      const payerSelect = document.getElementById('payerSelect');
-      const participantsSelect = document.getElementById('participantsSelect');
-      payerSelect.innerHTML = '';
-      participantsSelect.innerHTML = '';
-      profiles.forEach(name => {
-        const option = document.createElement('option');
-        option.value = name;
-        option.textContent = name;
-        payerSelect.appendChild(option);
-
-        const checkbox = document.createElement('div');
-        checkbox.innerHTML = `<label><input type="checkbox" value="${name}" checked> ${name}</label>`;
-        participantsSelect.appendChild(checkbox);
-      });
-    }
-
-    function renderExpenseLog() {
-      const log = document.getElementById('expenseLog');
-      log.innerHTML = '';
-      expenses.forEach((e, index) => {
-        const div = document.createElement('div');
-        div.className = 'expense-item';
-        div.innerHTML = `${e.payer} paid €${e.amount} split with: ${e.participants.join(', ')}
-          <button onclick="deleteExpense(${index})">❌</button>`;
-        log.appendChild(div);
-      });
-    }
-
-    function addProfile() {
-      const name = document.getElementById('nameInput').value.trim();
-      if (name && !profiles.includes(name)) {
-        profiles.push(name);
-        document.getElementById('nameInput').value = '';
-        saveState();
-        renderProfiles();
-      }
-    }
-
-    function logExpense() {
-      const payer = document.getElementById('payerSelect').value;
-      const amount = parseFloat(document.getElementById('amountInput').value);
-      const checkboxes = document.querySelectorAll('#participantsSelect input[type="checkbox"]');
-      const participants = Array.from(checkboxes).filter(cb => cb.checked).map(cb => cb.value);
-      if (payer && !isNaN(amount) && amount > 0 && participants.length > 0) {
-        expenses.push({ payer, amount, participants });
-        document.getElementById('amountInput').value = '';
-        saveState();
-        renderExpenseLog();
-      }
-    }
-
-    function deleteExpense(index) {
-      expenses.splice(index, 1);
-      saveState();
-      renderExpenseLog();
-    }
-
-    function showSummary() {
-      const totals = {};
-      const balances = {};
-      profiles.forEach(p => {
-        totals[p] = 0;
-        balances[p] = 0;
-      });
-
-      let totalSpend = 0;
-      expenses.forEach(({ payer, amount, participants }) => {
-        totals[payer] += amount;
-        const share = amount / participants.length;
-        participants.forEach(person => {
-          balances[person] -= share;
-        });
-        balances[payer] += amount;
-        totalSpend += amount;
-      });
-
-      const summaryDiv = document.getElementById('summary');
-      summaryDiv.innerHTML = `<strong>Total Spend:</strong> €${totalSpend.toFixed(2)}<br><br>`;
-
-      profiles.forEach(p => {
-        summaryDiv.innerHTML += `${p} paid €${totals[p].toFixed(2)}, balance: <strong>€${balances[p].toFixed(2)}</strong><br>`;
-      });
-
-      summaryDiv.innerHTML += '<br><strong>Who owes whom:</strong><br>';
-      const creditors = profiles.filter(p => balances[p] > 0);
-      const debtors = profiles.filter(p => balances[p] < 0);
-
-      for (let debtor of debtors) {
-        let owed = -balances[debtor];
-        for (let creditor of creditors) {
-          if (balances[creditor] === 0) continue;
-          const amount = Math.min(owed, balances[creditor]);
-          if (amount > 0) {
-            summaryDiv.innerHTML += `${debtor} owes ${creditor} €${amount.toFixed(2)}<br>`;
-            balances[debtor] += amount;
-            balances[creditor] -= amount;
-            owed -= amount;
-          }
-        }
-      }
-    }
-
-    function exportCSV() {
-      let csv = 'Payer,Amount,Participants\n';
-      expenses.forEach(e => {
-        csv += `${e.payer},${e.amount},"${e.participants.join(', ')}"\n`;
-      });
-      const blob = new Blob([csv], { type: 'text/csv' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'expenses.csv';
-      a.click();
-    }
-
-    function toggleDarkMode() {
-      document.body.style.backgroundColor = document.body.style.backgroundColor === 'black' ? '#f7f9fc' : 'black';
-      document.body.style.color = document.body.style.color === 'white' ? '#000' : 'white';
-    }
-
-    // Initialize UI
-    renderProfiles();
-    renderExpenseLog();
-  </script>
 </body>
 </html>
