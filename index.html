@@ -5,27 +5,76 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Expense Splitter</title>
   <style>
-    body { font-family: Arial, sans-serif; padding: 20px; max-width: 600px; margin: auto; }
-    h2 { margin-top: 30px; }
-    input, select, button { margin: 5px 0; padding: 8px; width: 100%; }
-    .summary { background-color: #f4f4f4; padding: 10px; margin-top: 20px; }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: #f7f9fc;
+      margin: 0;
+      padding: 20px;
+      max-width: 700px;
+      margin: auto;
+    }
+    h1, h2 {
+      color: #333;
+    }
+    .card {
+      background-color: #fff;
+      border-radius: 10px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    input, select, button {
+      width: 100%;
+      padding: 10px;
+      margin-top: 10px;
+      margin-bottom: 20px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      box-sizing: border-box;
+    }
+    button {
+      background-color: #007bff;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+    .summary {
+      background-color: #eef2f7;
+      padding: 15px;
+      border-radius: 10px;
+    }
   </style>
 </head>
 <body>
-  <h1>Expense Splitter</h1>
+  <div class="card">
+    <h1>Expense Splitter</h1>
+  </div>
 
-  <h2>Add Profile</h2>
-  <input type="text" id="nameInput" placeholder="Enter name">
-  <button onclick="addProfile()">Add Profile</button>
+  <div class="card">
+    <h2>Add Profile</h2>
+    <input type="text" id="nameInput" placeholder="Enter name">
+    <button onclick="addProfile()">Add Profile</button>
+  </div>
 
-  <h2>Log Expense</h2>
-  <select id="payerSelect"></select>
-  <input type="number" id="amountInput" placeholder="Amount (EUR)">
-  <button onclick="logExpense()">Add Expense</button>
+  <div class="card">
+    <h2>Log Expense</h2>
+    <select id="payerSelect"></select>
+    <input type="number" id="amountInput" placeholder="Amount (EUR)">
 
-  <h2>Summary</h2>
-  <button onclick="showSummary()">Show Balances</button>
-  <div class="summary" id="summary"></div>
+    <label>Split Between:</label>
+    <div id="participantsSelect"></div>
+
+    <button onclick="logExpense()">Add Expense</button>
+  </div>
+
+  <div class="card">
+    <h2>Summary</h2>
+    <button onclick="showSummary()">Show Balances</button>
+    <div class="summary" id="summary"></div>
+  </div>
 
   <script>
     const profiles = [];
@@ -35,10 +84,16 @@
       const name = document.getElementById('nameInput').value.trim();
       if (name && !profiles.includes(name)) {
         profiles.push(name);
+
         const option = document.createElement('option');
         option.value = name;
         option.textContent = name;
         document.getElementById('payerSelect').appendChild(option);
+
+        const checkbox = document.createElement('div');
+        checkbox.innerHTML = `<label><input type="checkbox" value="${name}" checked> ${name}</label>`;
+        document.getElementById('participantsSelect').appendChild(checkbox);
+
         document.getElementById('nameInput').value = '';
       }
     }
@@ -46,33 +101,44 @@
     function logExpense() {
       const payer = document.getElementById('payerSelect').value;
       const amount = parseFloat(document.getElementById('amountInput').value);
-      if (payer && !isNaN(amount) && amount > 0) {
-        expenses.push({ payer, amount });
+      const checkboxes = document.querySelectorAll('#participantsSelect input[type="checkbox"]');
+      const participants = Array.from(checkboxes).filter(cb => cb.checked).map(cb => cb.value);
+
+      if (payer && !isNaN(amount) && amount > 0 && participants.length > 0) {
+        expenses.push({ payer, amount, participants });
         document.getElementById('amountInput').value = '';
+        checkboxes.forEach(cb => cb.checked = true);
       }
     }
 
     function showSummary() {
       const totals = {};
-      profiles.forEach(p => totals[p] = 0);
-      let totalSpend = 0;
+      const balances = {};
+      profiles.forEach(p => {
+        totals[p] = 0;
+        balances[p] = 0;
+      });
 
-      expenses.forEach(({ payer, amount }) => {
+      let totalSpend = 0;
+      expenses.forEach(({ payer, amount, participants }) => {
         totals[payer] += amount;
+        const share = amount / participants.length;
+        participants.forEach(person => {
+          balances[person] -= share;
+        });
+        balances[payer] += amount;
         totalSpend += amount;
       });
 
-      const perPerson = totalSpend / profiles.length;
-      const balances = {};
-      profiles.forEach(p => balances[p] = totals[p] - perPerson);
-
       const summaryDiv = document.getElementById('summary');
       summaryDiv.innerHTML = `<strong>Total Spend:</strong> €${totalSpend.toFixed(2)}<br><br>`;
+
       profiles.forEach(p => {
         summaryDiv.innerHTML += `${p} paid €${totals[p].toFixed(2)}, balance: <strong>€${balances[p].toFixed(2)}</strong><br>`;
       });
 
       summaryDiv.innerHTML += '<br><strong>Who owes whom:</strong><br>';
+
       const creditors = profiles.filter(p => balances[p] > 0);
       const debtors = profiles.filter(p => balances[p] < 0);
 
